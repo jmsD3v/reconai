@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReconAI Report — {{ result.target }}</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d1117;
+    --card: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --font: "Cascadia Code", "Fira Code", "Courier New", monospace;
+
+    --critical: #ff4444;
+    --high: #ff8800;
+    --medium: #ffcc00;
+    --low: #44aaff;
+    --info: #888888;
+
+    --critical-bg: rgba(255, 68, 68, 0.12);
+    --high-bg: rgba(255, 136, 0, 0.12);
+    --medium-bg: rgba(255, 204, 0, 0.12);
+    --low-bg: rgba(68, 170, 255, 0.12);
+    --info-bg: rgba(136, 136, 136, 0.12);
+  }
+
+  html { font-size: 14px; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    line-height: 1.6;
+    padding: 40px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  /* ── Header ── */
+  .report-header {
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 28px;
+    margin-bottom: 32px;
+  }
+
+  .report-header .logo-line {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+
+  .report-header .logo-line .badge {
+    background: #238636;
+    color: #fff;
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 12px;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+  }
+
+  .report-header h1 {
+    font-size: 1.9rem;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.02em;
+  }
+
+  .report-header .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 8px;
+    margin-top: 18px;
+  }
+
+  .meta-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+  }
+
+  .meta-item .label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin-bottom: 3px;
+  }
+
+  .meta-item .value {
+    font-size: 0.92rem;
+    color: var(--text);
+    word-break: break-all;
+  }
+
+  /* ── Section headings ── */
+  .section {
+    margin-bottom: 36px;
+  }
+
+  .section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-bottom: 18px;
+  }
+
+  /* ── Executive Summary ── */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+  }
+
+  @media (max-width: 700px) {
+    .summary-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+
+  .summary-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 12px;
+    text-align: center;
+  }
+
+  .summary-card .sev-count {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+
+  .summary-card .sev-label {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+  }
+
+  .sev-critical .sev-count { color: var(--critical); }
+  .sev-high .sev-count     { color: var(--high); }
+  .sev-medium .sev-count   { color: var(--medium); }
+  .sev-low .sev-count      { color: var(--low); }
+  .sev-info .sev-count     { color: var(--info); }
+  .sev-total .sev-count    { color: var(--text); }
+
+  .sev-critical { border-color: var(--critical); }
+  .sev-high     { border-color: var(--high); }
+  .sev-medium   { border-color: var(--medium); }
+  .sev-low      { border-color: var(--low); }
+
+  .error-note {
+    margin-top: 12px;
+    padding: 8px 14px;
+    border-left: 3px solid var(--high);
+    background: var(--high-bg);
+    border-radius: 0 4px 4px 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  /* ── AI Analysis ── */
+  .ai-box {
+    background: var(--card);
+    border: 1px solid #388bfd55;
+    border-left: 4px solid #388bfd;
+    border-radius: 8px;
+    padding: 20px 24px;
+  }
+
+  .ai-box .ai-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #388bfd;
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+
+  .ai-box p {
+    color: var(--text);
+    font-size: 0.9rem;
+    white-space: pre-wrap;
+  }
+
+  /* ── Attack Paths ── */
+  .attack-paths-list {
+    list-style: none;
+    counter-reset: path-counter;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .attack-paths-list li {
+    counter-increment: path-counter;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 16px;
+  }
+
+  .attack-paths-list li::before {
+    content: counter(path-counter);
+    background: var(--critical);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    min-width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .attack-paths-list li span {
+    font-size: 0.9rem;
+    color: var(--text);
+  }
+
+  /* ── Findings Table ── */
+  .findings-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+
+  .findings-table thead tr {
+    background: var(--card);
+    border-bottom: 2px solid var(--border);
+  }
+
+  .findings-table th {
+    text-align: left;
+    padding: 10px 12px;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  .findings-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+
+  .findings-table tbody tr:hover {
+    background: rgba(255,255,255,0.03);
+  }
+
+  .findings-table .col-sev { width: 100px; }
+  .findings-table .col-agent { width: 130px; }
+  .findings-table .col-type { width: 100px; }
+  .findings-table .col-mitre { width: 180px; }
+
+  /* ── Severity badge ── */
+  .sev-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .badge-critical { color: var(--critical); background: var(--critical-bg); border: 1px solid var(--critical); }
+  .badge-high     { color: var(--high);     background: var(--high-bg);     border: 1px solid var(--high); }
+  .badge-medium   { color: var(--medium);   background: var(--medium-bg);   border: 1px solid var(--medium); }
+  .badge-low      { color: var(--low);      background: var(--low-bg);      border: 1px solid var(--low); }
+  .badge-info     { color: var(--info);     background: var(--info-bg);     border: 1px solid var(--info); }
+
+  /* ── Monospace tags ── */
+  .mono-tag {
+    display: inline-block;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin: 1px 2px;
+    white-space: nowrap;
+  }
+
+  /* ── Finding detail cards ── */
+  .findings-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .finding-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .finding-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+  }
+
+  .finding-card-header .fc-title {
+    flex: 1;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .finding-card-header .fc-agent {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .finding-card-body {
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .finding-description {
+    font-size: 0.88rem;
+    color: var(--text);
+    line-height: 1.65;
+    white-space: pre-wrap;
+  }
+
+  .finding-meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .finding-meta-row .row-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin-right: 4px;
+  }
+
+  .mitre-tag {
+    display: inline-block;
+    background: rgba(35, 134, 54, 0.15);
+    border: 1px solid #238636;
+    border-radius: 3px;
+    padding: 1px 7px;
+    font-size: 0.75rem;
+    color: #3fb950;
+    font-weight: 600;
+    white-space: nowrap;
+    margin: 1px 2px;
+  }
+
+  .finding-data {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-size: 0.8rem;
+    color: #79c0ff;
+    white-space: pre-wrap;
+    overflow-x: auto;
+    max-height: 320px;
+    overflow-y: auto;
+    line-height: 1.5;
+  }
+
+  .finding-screenshot img {
+    max-width: 100%;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    display: block;
+  }
+
+  .finding-timestamp {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* ── Footer ── */
+  .report-footer {
+    margin-top: 48px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    line-height: 1.8;
+  }
+
+  .report-footer a {
+    color: #388bfd;
+    text-decoration: none;
+  }
+
+  /* ── Divider ── */
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 28px 0;
+  }
+
+  /* ── Empty state ── */
+  .empty-state {
+    padding: 24px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    background: var(--card);
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ─── HEADER ──────────────────────────────────────────────── -->
+<header class="report-header">
+  <div class="logo-line">
+    <span style="font-size:1.1rem; font-weight:800; letter-spacing:-0.03em;">ReconAI</span>
+    <span class="badge">RECON REPORT</span>
+  </div>
+  <h1>{{ result.target }}</h1>
+
+  <div class="meta-grid">
+    <div class="meta-item">
+      <div class="label">Target</div>
+      <div class="value">{{ result.target }}</div>
+    </div>
+    <div class="meta-item">
+      <div class="label">Scan Started</div>
+      <div class="value">{{ result.started_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}</div>
+    </div>
+    <div class="meta-item">
+      <div class="label">Duration</div>
+      <div class="value">{{ duration }}</div>
+    </div>
+    <div class="meta-item">
+      <div class="label">Report Generated</div>
+      <div class="value">{{ generated_at }}</div>
+    </div>
+    <div class="meta-item">
+      <div class="label">Total Findings</div>
+      <div class="value">{{ result.findings | length }}</div>
+    </div>
+  </div>
+</header>
+
+<!-- ─── EXECUTIVE SUMMARY ────────────────────────────────────── -->
+<section class="section">
+  <h2 class="section-title">Executive Summary</h2>
+
+  <div class="summary-grid">
+    <div class="summary-card sev-total">
+      <div class="sev-count">{{ result.findings | length }}</div>
+      <div class="sev-label">Total</div>
+    </div>
+    <div class="summary-card sev-critical">
+      <div class="sev-count">{{ findings_by_severity.critical | length }}</div>
+      <div class="sev-label">Critical</div>
+    </div>
+    <div class="summary-card sev-high">
+      <div class="sev-count">{{ findings_by_severity.high | length }}</div>
+      <div class="sev-label">High</div>
+    </div>
+    <div class="summary-card sev-medium">
+      <div class="sev-count">{{ findings_by_severity.medium | length }}</div>
+      <div class="sev-label">Medium</div>
+    </div>
+    <div class="summary-card sev-low">
+      <div class="sev-count">{{ findings_by_severity.low | length }}</div>
+      <div class="sev-label">Low</div>
+    </div>
+    <div class="summary-card sev-info">
+      <div class="sev-count">{{ findings_by_severity.info | length }}</div>
+      <div class="sev-label">Info</div>
+    </div>
+  </div>
+
+  {% if result.error_count > 0 %}
+  <div class="error-note">
+    ⚠ {{ result.error_count }} agent error{{ 's' if result.error_count != 1 else '' }} encountered during scan — some results may be incomplete.
+  </div>
+  {% endif %}
+</section>
+
+<!-- ─── AI ANALYSIS ──────────────────────────────────────────── -->
+{% if result.ai_analysis %}
+<section class="section">
+  <h2 class="section-title">AI Analysis</h2>
+  <div class="ai-box">
+    <div class="ai-label">Claude AI — Reconnaissance Analysis</div>
+    <p>{{ result.ai_analysis }}</p>
+  </div>
+</section>
+{% endif %}
+
+<!-- ─── ATTACK PATHS ─────────────────────────────────────────── -->
+{% if result.ai_attack_paths %}
+<section class="section">
+  <h2 class="section-title">Potential Attack Paths</h2>
+  <ol class="attack-paths-list">
+    {% for path in result.ai_attack_paths %}
+    <li><span>{{ path }}</span></li>
+    {% endfor %}
+  </ol>
+</section>
+{% endif %}
+
+<!-- ─── FINDINGS TABLE ───────────────────────────────────────── -->
+<section class="section">
+  <h2 class="section-title">Findings ({{ result.findings | length }})</h2>
+
+  {% if result.findings %}
+  <table class="findings-table">
+    <thead>
+      <tr>
+        <th class="col-sev">Severity</th>
+        <th class="col-agent">Agent</th>
+        <th class="col-type">Type</th>
+        <th>Title</th>
+        <th class="col-mitre">MITRE ATT&amp;CK</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in result.findings | sort(attribute='severity.weight', reverse=True) %}
+      <tr>
+        <td>
+          <span class="sev-badge badge-{{ f.severity.value }}">{{ f.severity.value | upper }}</span>
+        </td>
+        <td><span class="mono-tag">{{ f.agent }}</span></td>
+        <td><span class="mono-tag">{{ f.type.value }}</span></td>
+        <td style="font-size:0.88rem;">{{ f.title }}</td>
+        <td>
+          {% for t in f.mitre_techniques %}
+          <span class="mitre-tag">{{ t }}</span>
+          {% endfor %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">No findings recorded for this scan.</div>
+  {% endif %}
+</section>
+
+<!-- ─── FINDING DETAIL CARDS ─────────────────────────────────── -->
+{% if result.findings %}
+<section class="section">
+  <h2 class="section-title">Finding Details</h2>
+
+  <div class="findings-detail">
+    {% for f in result.findings | sort(attribute='severity.weight', reverse=True) %}
+    <div class="finding-card">
+
+      <div class="finding-card-header">
+        <span class="sev-badge badge-{{ f.severity.value }}">{{ f.severity.value | upper }}</span>
+        <span class="fc-title">{{ f.title }}</span>
+        <span class="fc-agent">{{ f.agent }} / {{ f.type.value }}</span>
+      </div>
+
+      <div class="finding-card-body">
+
+        <p class="finding-description">{{ f.description }}</p>
+
+        {% if f.mitre_techniques %}
+        <div class="finding-meta-row">
+          <span class="row-label">MITRE</span>
+          {% for t in f.mitre_techniques %}
+          <span class="mitre-tag">{{ t }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if f.type.value == 'screenshot' %}
+          {% if f.data.screenshot_b64 %}
+          <div class="finding-screenshot">
+            <img src="data:image/png;base64,{{ f.data.screenshot_b64 }}" style="max-width:100%;border-radius:4px;">
+          </div>
+          {% endif %}
+          {% if f.data.title %}
+          <div class="finding-meta-row">
+            <span class="row-label">Page Title</span>
+            <span class="mono-tag">{{ f.data.title }}</span>
+          </div>
+          {% endif %}
+          {% if f.data.url %}
+          <div class="finding-meta-row">
+            <span class="row-label">URL</span>
+            <span class="mono-tag">{{ f.data.url }}</span>
+          </div>
+          {% endif %}
+        {% else %}
+          {% set data_clean = {} %}
+          {% for k, v in f.data.items() %}
+            {% if k != 'screenshot_b64' %}
+              {% set _ = data_clean.update({k: v}) %}
+            {% endif %}
+          {% endfor %}
+          {% if data_clean %}
+          <pre class="finding-data">{{ data_clean | tojson(indent=2) }}</pre>
+          {% endif %}
+        {% endif %}
+
+        <div class="finding-timestamp">{{ f.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC') }}</div>
+
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- ─── FOOTER ───────────────────────────────────────────────── -->
+<footer class="report-footer">
+  <div>Generated by <strong>ReconAI</strong> — Offensive Reconnaissance Orchestrator</div>
+  <div>
+    Copyright &copy; 2025 Desarrollado desde Las Breñas con 💜 por
+    <a href="https://www.linkedin.com/in/jmsilva83" target="_blank">@jmsDev</a>
+    All rights reserved
+  </div>
+</footer>
+
+</body>
+</html>

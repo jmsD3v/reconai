@@ -51,6 +51,7 @@ def scan(
     ),
     no_ai: bool = typer.Option(False, "--no-ai", help="Skip Claude AI analysis."),
     output: Path | None = typer.Option(None, "--output", "-o", help="Save JSON report to file."),
+    report: Path | None = typer.Option(None, "--report", "-r", help="Generate PDF report (e.g. --report report.pdf). Use .html for HTML only."),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress banner and progress."),
 ) -> None:
     """Run a full recon scan against the target."""
@@ -79,7 +80,13 @@ def scan(
 
     if output:
         output.write_text(json.dumps(result.to_dict(), indent=2, default=str))
-        console.print(f"\n[green]Report saved → {output}[/green]")
+        console.print(f"\n[green]JSON saved → {output}[/green]")
+
+    if report:
+        from reconai.report.generator import generate_report
+        fmt = "html" if str(report).endswith(".html") else "pdf"
+        out_path = asyncio.run(generate_report(result, report, fmt=fmt))
+        console.print(f"\n[green]Report saved → {out_path}[/green]")
 
 
 @app.command()
