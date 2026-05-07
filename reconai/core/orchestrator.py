@@ -18,6 +18,7 @@ from rich.table import Table
 
 from reconai.agents.dns_recon import DNSReconAgent
 from reconai.agents.port_scanner import PortScannerAgent
+from reconai.agents.web_tech import WebTechAgent
 from reconai.agents.whois_agent import WHOISAgent
 from reconai.core.target import Target
 from reconai.types.findings import ReconResult, Severity
@@ -30,8 +31,9 @@ AGENTS = [
     DNSReconAgent(),
     PortScannerAgent(),
     WHOISAgent(),
-    # WebTechAgent(),       # Phase 2
+    WebTechAgent(),
     # ShodanAgent(),        # Phase 2 (needs API key)
+    # ShodanAgent(),        # Phase 2 — needs API key
     # ScreenshotAgent(),    # Phase 2
 ]
 
