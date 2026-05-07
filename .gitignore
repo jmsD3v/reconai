@@ -1,0 +1,12 @@
+.env
+*.pdf
+*.pyc
+__pycache__/
+.venv/
+venv/
+dist/
+*.egg-info/
+.pytest_cache/
+node_modules/
+frontend/.next/
+frontend/out/

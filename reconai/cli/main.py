@@ -88,6 +88,12 @@ def scan(
         out_path = asyncio.run(generate_report(result, report, fmt=fmt))
         console.print(f"\n[green]Report saved → {out_path}[/green]")
 
+    from reconai.integrations.supabase_writer import persist_scan
+    scan_id = asyncio.run(persist_scan(result))
+    if scan_id:
+        supabase_url = os.getenv("SUPABASE_URL", "")
+        console.print(f"[bright_black]Supabase → scan saved ({scan_id})[/bright_black]")
+
 
 @app.command()
 def agents() -> None:
