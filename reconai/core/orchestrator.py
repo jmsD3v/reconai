@@ -17,6 +17,7 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TextColumn
 from rich.table import Table
 
 from reconai.agents.dns_recon import DNSReconAgent
+from reconai.agents.port_scanner import PortScannerAgent
 from reconai.core.target import Target
 from reconai.types.findings import ReconResult, Severity
 
@@ -26,7 +27,7 @@ console = Console()
 # Registry — add new agents here as you build them
 AGENTS = [
     DNSReconAgent(),
-    # PortScannerAgent(),   # Phase 2
+    PortScannerAgent(),
     # WHOISAgent(),         # Phase 2
     # WebTechAgent(),       # Phase 2
     # ShodanAgent(),        # Phase 2 (needs API key)
