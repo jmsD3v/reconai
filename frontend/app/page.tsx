@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import type { Scan, Severity } from '@/lib/types'
 import { StatsCard } from '@/components/StatsCard'
 import { SeverityBadge } from '@/components/SeverityBadge'
+import { NewScanModal } from '@/components/NewScanModal'
 
 interface FindingCountRow {
   scan_id: string
@@ -105,13 +106,16 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-bold font-mono text-[#e6edf3]">
-          Scan Dashboard
-        </h1>
-        <p className="text-[#8b949e] text-sm mt-1">
-          Recon results from authorized targets — HTB, THM, RFC1918
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold font-mono text-[#e6edf3]">
+            Scan Dashboard
+          </h1>
+          <p className="text-[#8b949e] text-sm mt-1">
+            Recon results from authorized targets — HTB, THM, RFC1918
+          </p>
+        </div>
+        <NewScanModal />
       </div>
 
       {/* Stats row */}
