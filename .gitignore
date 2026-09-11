@@ -10,3 +10,5 @@ dist/
 node_modules/
 frontend/.next/
 frontend/out/
+
+frontend/.env.local
