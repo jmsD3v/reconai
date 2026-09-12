@@ -1,238 +1,148 @@
-# 🔍 ReconAI — Offensive Reconnaissance Orchestrator
+# ReconAI
 
-<div align="center">
-
-![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![Gemini](https://img.shields.io/badge/Gemini_AI-Free_Tier-4285F4?style=for-the-badge&logo=google&logoColor=white)
-![Async](https://img.shields.io/badge/Async-asyncio-00b4d8?style=for-the-badge)
-![Portfolio](https://img.shields.io/badge/Portfolio-P--01_Offensive-critical?style=for-the-badge)
-
-**Automated multi-source OSINT & active reconnaissance with AI-powered attack surface analysis**
-
-*P-01 of 9 · Cybersecurity Portfolio by [@jmsDev](https://www.linkedin.com/in/jmsilva83)*
-
-</div>
+Orquestador de reconocimiento ofensivo (P-01 del portfolio de ciberseguridad) que dispara varios agentes de recon en paralelo contra un target y usa IA para resumir la superficie de ataque.
 
 ---
 
-## What it does
+## Qué hace
 
-ReconAI fires **6 reconnaissance agents in parallel** against a target, then feeds all findings to **Google Gemini** to reconstruct the attack surface, classify severity, and suggest initial exploitation paths — all from a single command.
+ReconAI recibe un target (IP, dominio o host de laboratorio) y corre **6 agentes de reconocimiento de forma concurrente** con `asyncio.gather`: DNS, escaneo de puertos (nmap), WHOIS, fingerprinting web (headers/tecnologías), Shodan y captura de pantalla con navegador headless. Cada hallazgo se normaliza como un `Finding` con severidad (`critical` → `info`) y técnica MITRE ATT&CK asociada. Si hay una `ANTHROPIC_API_KEY` configurada, al final del scan se le pasan todos los hallazgos a un modelo de **Claude (Anthropic)** para que redacte un resumen ejecutivo del attack surface y sugiera rutas de ataque a investigar manualmente. Todo corre detrás de un "scope gate" (`core/target.py`) que bloquea por default cualquier target que no sea de laboratorio (HTB, THM, RFC1918, `.htb`/`.thm`/`.local`) salvo que se fuerce explícitamente con autorización.
+
+> **Nota de precisión:** la etiqueta de portfolio de este proyecto menciona "Gemini AI analysis", pero el código real (`reconai/core/ai_analyzer.py`) integra el SDK de **Anthropic/Claude** (`claude-sonnet-4-20250514`), no Gemini. Este README describe lo que el código efectivamente hace.
+
+---
+
+## Características
+
+- **Agentes en paralelo real** — los 6 agentes corren vía `asyncio.gather`; el tiempo total de scan es el del agente más lento, no la suma de todos.
+- **Scope gate ético** — `Target.validate_scope()` rechaza targets fuera de rangos autorizados (HTB, THM, RFC1918, `.htb`/`.thm`/`.local`, loopback) a menos que se use `--force-scope` o se agregue el target a `AUTHORIZED_SCOPE`.
+- **Tolerante a fallos** — cada agente atrapa sus propias excepciones (`BaseAgent.execute`) y agrega un `Finding` de error en vez de tirar abajo el orchestrator completo. Se verificó en este entorno: sin `nmap` instalado, sin API key de Shodan y sin navegadores de Playwright descargados, el scan igual termina y reporta 6 findings informativos en vez de crashear.
+- **Análisis con IA opcional** — `--no-ai` lo desactiva por completo; sin `ANTHROPIC_API_KEY` configurada, el análisis se omite con un mensaje claro en vez de romper el scan.
+- **Tagging MITRE ATT&CK** — cada finding lleva técnicas asociadas (ej. `T1046` para puertos, `T1590.002` para DNS).
+- **Salida enriquecida** — tabla en terminal con Rich (color por severidad), export a JSON, y generación de reporte HTML/PDF (Jinja2 + WeasyPrint) vía `--report`.
+- **Persistencia opcional en Supabase** — si `SUPABASE_URL`/`SUPABASE_ANON_KEY` están seteadas, cada scan se guarda en Supabase (`persist_scan`, best-effort — si falla, no rompe el CLI) para verse en el dashboard de Next.js incluido en `frontend/` (app separada, no hace falta para correr el CLI).
+
+---
+
+## Requisitos
+
+- **Python 3.11+** (declarado en `pyproject.toml`; probado en este entorno con Python 3.14.6 sin conflictos).
+- **nmap** instalado y en el `PATH` del sistema para que `PortScannerAgent` funcione (`winget install nmap` en Windows, `apt install nmap` en Linux). Sin él, el agente no crashea: agrega un finding de error y el resto del scan sigue.
+- (Opcional) **Playwright + Chromium** para `ScreenshotAgent`: `playwright install chromium`.
+- Variables de entorno (ver `.env.example`, copiarlo a `.env`):
+
+| Variable | Requerida | Para qué |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Solo si no usás `--no-ai` | Habilita el análisis con Claude al final del scan |
+| `SHODAN_API_KEY` | No | Habilita `ShodanAgent` (sin ella, el agente se salta con un finding informativo) |
+| `SUPABASE_URL` | No | Persistencia de scans/findings para el dashboard |
+| `SUPABASE_ANON_KEY` | No | Idem — clave anónima del proyecto Supabase |
+| `AUTHORIZED_SCOPE` | No | CIDRs/dominios adicionales autorizados, separados por coma (ej. `192.168.1.0/24,lab.miempresa.com`) |
+
+---
+
+## Instalación
+
+Probado end-to-end en Windows (PowerShell/Git Bash) contra este mismo repo:
 
 ```bash
-reconai scan 10.10.11.21
-```
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  ReconAI  v0.1.0 — Automated Recon Orchestrator         │
-│  P-01 · DNS + Ports + WHOIS + WebTech + Shodan + AI     │
-└─────────────────────────────────────────────────────────┘
-
-[✓] DNS recon          8 findings  (1.2s)
-[✓] Port scan          12 findings (4.8s)
-[✓] WHOIS              3 findings  (0.9s)
-[✓] Web tech           5 findings  (1.1s)
-[✓] Shodan             4 findings  (0.8s)
-
-Artifacts — 32 total
-┌──────────┬─────────────────────┬──────────────────────────────────────────┐
-│ Severity │ Type                │ Description                              │
-├──────────┼─────────────────────┼──────────────────────────────────────────┤
-│ HIGH     │ dns                 │ Zone transfer (AXFR) open on ns1.target  │
-│ HIGH     │ port                │ SMB 445 open — EternalBlue potential     │
-│ MEDIUM   │ web_tech            │ Apache 2.4.49 — CVE-2021-41773           │
-│ ...      │ ...                 │ ...                                      │
-└──────────┴─────────────────────┴──────────────────────────────────────────┘
-
-╔═══════════════════════════════════════════════════════╗
-║  AI Incident Narrative                                ║
-║  Target exposes a Jenkins instance (port 8080) with   ║
-║  default credentials and an AXFR-open nameserver.    ║
-║  Recommend: exploit Jenkins script console for RCE   ║
-╚═══════════════════════════════════════════════════════╝
-```
-
----
-
-## Features
-
-- **Parallel agent execution** — all agents run via `asyncio.gather`, total time = slowest agent
-- **Scope gate** — validates every target before network activity; refuses unauthorized hosts
-- **Gemini AI analysis** — attack surface reconstruction, severity prioritization, next-step suggestions
-- **MITRE ATT&CK tagging** — every finding mapped to technique IDs
-- **Rich terminal output** — color-coded severity table + AI narrative panel
-- **JSON export** — machine-readable output for report pipelines
-
----
-
-## Agents
-
-| Agent | File | What it detects | MITRE Techniques |
-|---|---|---|---|
-| **DNS Recon** | `dns_recon.py` | A/MX/NS/TXT records, AXFR, subdomain enumeration, SPF/DMARC issues | T1590.002, T1596.001 |
-| **Port Scanner** | `port_scanner.py` | Open TCP/UDP ports, service banners, version fingerprinting | T1046 |
-| **WHOIS** | `whois_agent.py` | Registrar info, org data, expiry, privacy disclosure | T1590.001 |
-| **Web Tech** | `web_tech.py` | CMS, frameworks, server versions, JS libraries, headers | T1592.002 |
-| **Shodan** | `shodan_agent.py` | Historical exposure, CVEs, open services (free InternetDB) | T1596.005 |
-| **Screenshot** | `screenshot.py` | Web page capture via Playwright | T1593 |
-
----
-
-## Installation
-
-```bash
-git clone https://github.com/jmsdev83/reconai
+git clone <url-de-este-repo>
 cd reconai
+
+python -m venv .venv
+
+# Activar el entorno virtual
+# Windows (PowerShell):
+.venv\Scripts\Activate.ps1
+# Windows (Git Bash):
+source .venv/Scripts/activate
+
 pip install -e .
 
-# Optional: Playwright for screenshots
-playwright install chromium
-
-# Configure
+# Configurar variables de entorno
 cp .env.example .env
-# Edit .env and add your GEMINI_API_KEY
+# Editar .env y completar ANTHROPIC_API_KEY (y opcionalmente SHODAN_API_KEY / SUPABASE_*)
+
+# Opcional, solo si vas a usar el agente de screenshots:
+playwright install chromium
 ```
 
-### Requirements
-
-- Python 3.11+
-- `python-nmap` requires nmap installed (`winget install nmap` / `apt install nmap`)
-- Gemini API key: [aistudio.google.com](https://aistudio.google.com) (free tier)
+La instalación con `pip install -e .` corrió limpia en este entorno, sin conflictos de versiones.
 
 ---
 
-## Usage
+## Uso
+
+Flags reales, tomados directo de la definición de Typer en `reconai/cli/main.py`:
 
 ```bash
-# Full recon with AI analysis
-reconai scan 10.10.11.21
+reconai --help                 # ver comandos disponibles
+reconai agents                 # listar los 6 agentes registrados
 
-# Skip AI (faster, no API key needed)
-reconai scan target.htb --no-ai
+reconai scan <target> [OPTIONS]
 
-# Save to JSON
-reconai scan 10.10.11.21 --output report.json
-
-# List available agents and their status
-reconai agents
+Opciones de "scan":
+  --force-scope           Fuerza el scan fuera de los rangos autorizados (requiere autorización escrita)
+  --no-ai                 Salta el análisis con Claude
+  --output, -o <path>     Guarda el reporte en JSON
+  --report, -r <path>     Genera reporte PDF (o HTML si el path termina en .html)
+  --quiet, -q              Suprime el banner y la barra de progreso
 ```
 
-### Authorized targets (no flag needed)
+Ejemplo completo, verificado en este entorno:
 
-| Range | Context |
-|---|---|
-| `10.10.10.0/23`, `10.10.11.0/24` | HackTheBox active machines |
-| `10.10.0.0/16`, `10.8.0.0/16` | TryHackMe |
-| RFC1918 (`10.x`, `172.16-31.x`, `192.168.x`) | Private networks |
-| `*.htb`, `*.thm`, `*.local` | Lab hostnames |
+```bash
+reconai scan 127.0.0.1 --no-ai --output scan.json
+```
 
-For external targets: add `--force-scope` and confirm written authorization.
+Otros ejemplos:
+
+```bash
+reconai scan 10.10.11.21                              # scan completo con análisis de Claude (in-scope por default, HTB)
+reconai scan target.htb --no-ai                       # sin llamar a la API de Claude
+reconai scan target.htb --report informe.pdf          # genera reporte PDF
+reconai scan 192.168.1.50 --force-scope --output r.json  # target fuera de scope, con autorización explícita
+```
+
+### Targets autorizados por default (sin `--force-scope`)
+
+`10.10.10.0/24` y `10.10.11.0/24` (HackTheBox), `10.10.0.0/16` y `10.8.0.0/16` (TryHackMe), rangos RFC1918 completos (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), `127.0.0.0/8`, y hosts `.htb` / `.thm` / `.local` / `localhost`. Cualquier otro target necesita `--force-scope` **y autorización escrita real** — el scope gate no se debe bypassear a la ligera.
 
 ---
 
-## Architecture
-
-```
-reconai scan <target>
-       │
-       ▼
-  Target.parse()          ← extract host, port, IP vs domain
-       │
-       ▼
-  validate_scope()        ← ETHICAL GATE — raises ScopeError if unauthorized
-       │
-       ▼
-  asyncio.gather(agents)  ← all agents run concurrently
-  ┌────┴──────────────────────────────────────────────┐
-  │  DNSReconAgent  PortScannerAgent  WHOISAgent      │
-  │  WebTechAgent   ShodanAgent       ScreenshotAgent │
-  └────┬──────────────────────────────────────────────┘
-       │
-       ▼
-  analyze_with_ai()       ← Gemini: attack surface + next steps
-       │
-       ▼
-  Rich table + AI panel / JSON export
-```
-
----
-
-## Severity Classification
-
-| Level | Meaning | Example |
-|---|---|---|
-| 🔴 **CRITICAL** | Directly exploitable | AXFR open, RCE-vulnerable service |
-| 🟠 **HIGH** | Serious misconfiguration | SMB exposed, `+all` in SPF |
-| 🟡 **MEDIUM** | Missing security control | No DMARC, exposed admin panel |
-| 🔵 **LOW** | Attacker-useful intel | Server version disclosed |
-| ⚪ **INFO** | Neutral recon data | Open ports, DNS records |
-
----
-
-## Project Structure
+## Estructura del proyecto
 
 ```
 reconai/
-├── reconai/
-│   ├── agents/
-│   │   ├── base.py           # BaseAgent ABC
-│   │   ├── dns_recon.py      # DNS enumeration + AXFR + SPF/DMARC
-│   │   ├── port_scanner.py   # TCP/UDP + service fingerprint
-│   │   ├── whois_agent.py    # WHOIS + org lookup
-│   │   ├── web_tech.py       # HTTP headers + tech detection
-│   │   ├── shodan_agent.py   # Shodan InternetDB (no API key)
-│   │   └── screenshot.py     # Playwright web capture
-│   ├── core/
-│   │   ├── target.py         # Scope validation (the ethical gate)
-│   │   ├── orchestrator.py   # Async pipeline + result aggregation
-│   │   └── ai_analyzer.py    # Gemini prompt + response parsing
-│   ├── types/
-│   │   └── findings.py       # Finding, ReconResult, Severity, FindingType
-│   └── cli/
-│       └── main.py           # Typer CLI entry point
+├── pyproject.toml
 ├── .env.example
-└── pyproject.toml
+├── reconai/                     # paquete Python (el CLI)
+│   ├── cli/main.py              # entrypoint Typer: `scan` y `agents`
+│   ├── core/
+│   │   ├── target.py            # Target.parse() + scope gate (ScopeValidator)
+│   │   ├── orchestrator.py      # dispatch async de los 6 agentes + AGENTS registry
+│   │   └── ai_analyzer.py       # integración con Claude (Anthropic)
+│   ├── agents/
+│   │   ├── base.py              # BaseAgent ABC — tolerante a fallos
+│   │   ├── dns_recon.py         # DNS, AXFR, subdominios, SPF/DMARC
+│   │   ├── port_scanner.py      # nmap top-1000 + fingerprint de servicio
+│   │   ├── whois_agent.py       # WHOIS de dominio/IP, expiración, privacidad
+│   │   ├── web_tech.py          # headers HTTP, WAF, tech stack, security headers
+│   │   ├── shodan_agent.py      # Shodan (requiere SHODAN_API_KEY)
+│   │   └── screenshot.py        # captura headless con Playwright
+│   ├── integrations/
+│   │   └── supabase_writer.py   # persistencia opcional best-effort en Supabase
+│   ├── report/
+│   │   ├── generator.py         # Jinja2 → HTML → PDF (WeasyPrint)
+│   │   └── template.html
+│   └── types/findings.py        # Finding, ReconResult, Severity, FindingType
+├── frontend/                     # dashboard Next.js + Supabase (app aparte, opcional)
+├── tests/                        # sin tests todavía (carpeta vacía)
+└── docs/                         # sin contenido todavía (carpeta vacía)
 ```
 
 ---
 
-## Environment Variables
+## Aviso legal
 
-```env
-GEMINI_API_KEY=your-key-here      # Google AI Studio (free tier)
-SHODAN_API_KEY=                   # Optional — enables full Shodan API
-AUTHORIZED_SCOPE=10.0.0.0/8      # Additional authorized CIDRs/domains
-```
-
----
-
-## Portfolio
-
-**9-project cybersecurity portfolio** — built to land a first infosec job.
-
-| # | Category | Project | Status |
-|---|---|---|---|
-| P-01 | Offensive | **ReconAI** ← you are here | ✅ |
-| P-02 | Offensive | WebHunter — OWASP Top 10 Scanner | ✅ |
-| P-03 | Offensive | PhishSim — Red Team Phishing Platform | ✅ |
-| D-01 | Defensive | SOC-Lite — AI-Powered SIEM | ✅ |
-| D-02 | Defensive | ThreatFeed — CTI Aggregator | ✅ |
-| D-03 | Defensive | HoneyGrid — SSH/HTTP Honeypot | ✅ |
-| F-01 | Forensics | DFIR-Auto — Forensic Triage | ✅ |
-| F-02 | Forensics | MalwareScope — Static Malware Analyzer | ✅ |
-| F-03 | Forensics | PCAPForge — Network Forensics | ✅ |
-
----
-
-> ⚠️ **Legal Notice** — ReconAI is designed exclusively for authorized security testing.
-> The scope validator enforces this at the code level.
-> Always obtain written authorization before scanning any target you do not own.
-
----
-
-<div align="center">
-
-Copyright © 2025 Desarrollado desde Las Breñas con 💜 por [@jmsDev](https://www.linkedin.com/in/jmsilva83) · All rights reserved
-
-</div>
+ReconAI es una herramienta educativa y de práctica para pentesting **autorizado**. Solo debe usarse contra sistemas propios o para los cuales se cuenta con autorización escrita explícita del propietario. Escanear infraestructura de terceros sin autorización puede constituir un delito según la legislación aplicable. El scope gate (`core/target.py`) es un control técnico de ayuda, no un sustituto de la autorización legal correspondiente.

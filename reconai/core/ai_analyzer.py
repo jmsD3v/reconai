@@ -58,9 +58,9 @@ Format your response as plain text. Be specific — reference actual hostnames, 
 
 async def analyze_with_ai(result: ReconResult) -> None:
     """Enrich result with AI narrative analysis. Modifies result in place."""
-    client = _get_client()
-
     try:
+        client = _get_client()
+
         message = await client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=1024,
@@ -73,6 +73,8 @@ async def analyze_with_ai(result: ReconResult) -> None:
         paths = re.findall(r"^\d+\.\s+(.+)$", result.ai_analysis, re.MULTILINE)
         result.ai_attack_paths = paths[:5]
 
+    except RuntimeError as exc:
+        result.ai_analysis = f"AI analysis skipped — {exc}"
     except anthropic.AuthenticationError:
         result.ai_analysis = "AI analysis skipped — invalid ANTHROPIC_API_KEY."
     except Exception as exc:

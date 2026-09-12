@@ -66,7 +66,7 @@ class WebTechAgent(BaseAgent):
                             result.add(Finding(
                                 agent=self.name,
                                 type=FindingType.TECH,
-                                title=f"HTTP→HTTPS redirect — {host}",
+                                title=f"HTTP->HTTPS redirect — {host}",
                                 description=f"HTTP requests to {url} redirect to HTTPS.",
                                 severity=Severity.INFO,
                                 data={"from": url, "to": final_url},
