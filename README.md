@@ -6,9 +6,9 @@ Orquestador de reconocimiento ofensivo (P-01 del portfolio de ciberseguridad) qu
 
 ## Qué hace
 
-ReconAI recibe un target (IP, dominio o host de laboratorio) y corre **6 agentes de reconocimiento de forma concurrente** con `asyncio.gather`: DNS, escaneo de puertos (nmap), WHOIS, fingerprinting web (headers/tecnologías), Shodan y captura de pantalla con navegador headless. Cada hallazgo se normaliza como un `Finding` con severidad (`critical` → `info`) y técnica MITRE ATT&CK asociada. Si hay una `ANTHROPIC_API_KEY` configurada, al final del scan se le pasan todos los hallazgos a un modelo de **Claude (Anthropic)** para que redacte un resumen ejecutivo del attack surface y sugiera rutas de ataque a investigar manualmente. Todo corre detrás de un "scope gate" (`core/target.py`) que bloquea por default cualquier target que no sea de laboratorio (HTB, THM, RFC1918, `.htb`/`.thm`/`.local`) salvo que se fuerce explícitamente con autorización.
+ReconAI recibe un target (IP, dominio o host de laboratorio) y corre **6 agentes de reconocimiento de forma concurrente** con `asyncio.gather`: DNS, escaneo de puertos (nmap), WHOIS, fingerprinting web (headers/tecnologías), Shodan y captura de pantalla con navegador headless. Cada hallazgo se normaliza como un `Finding` con severidad (`critical` → `info`) y técnica MITRE ATT&CK asociada. Si hay configurada **cualquiera** de `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` u `OPENAI_API_KEY`, al final del scan se le pasan todos los hallazgos al proveedor de IA detectado (Claude, Gemini u OpenAI, según la key presente) para que redacte un resumen ejecutivo del attack surface y sugiera rutas de ataque a investigar manualmente. Todo corre detrás de un "scope gate" (`core/target.py`) que bloquea por default cualquier target que no sea de laboratorio (HTB, THM, RFC1918, `.htb`/`.thm`/`.local`) salvo que se fuerce explícitamente con autorización.
 
-> **Nota de precisión:** la etiqueta de portfolio de este proyecto menciona "Gemini AI analysis", pero el código real (`reconai/core/ai_analyzer.py`) integra el SDK de **Anthropic/Claude** (`claude-sonnet-4-20250514`), no Gemini. Este README describe lo que el código efectivamente hace.
+> **Nota de precisión:** la etiqueta de portfolio de este proyecto menciona "Gemini AI analysis". El código real (`reconai/core/ai_analyzer.py` + `reconai/core/ai_provider.py`) soporta **Anthropic/Claude**, **Google Gemini** y **OpenAI** por igual — el proveedor se auto-detecta según qué API key esté configurada, con prioridad `ANTHROPIC_API_KEY` > `GEMINI_API_KEY` > `OPENAI_API_KEY` cuando hay más de una seteada. Este README describe lo que el código efectivamente hace.
 
 ---
 
@@ -17,7 +17,7 @@ ReconAI recibe un target (IP, dominio o host de laboratorio) y corre **6 agentes
 - **Agentes en paralelo real** — los 6 agentes corren vía `asyncio.gather`; el tiempo total de scan es el del agente más lento, no la suma de todos.
 - **Scope gate ético** — `Target.validate_scope()` rechaza targets fuera de rangos autorizados (HTB, THM, RFC1918, `.htb`/`.thm`/`.local`, loopback) a menos que se use `--force-scope` o se agregue el target a `AUTHORIZED_SCOPE`.
 - **Tolerante a fallos** — cada agente atrapa sus propias excepciones (`BaseAgent.execute`) y agrega un `Finding` de error en vez de tirar abajo el orchestrator completo. Se verificó en este entorno: sin `nmap` instalado, sin API key de Shodan y sin navegadores de Playwright descargados, el scan igual termina y reporta 6 findings informativos en vez de crashear.
-- **Análisis con IA opcional** — `--no-ai` lo desactiva por completo; sin `ANTHROPIC_API_KEY` configurada, el análisis se omite con un mensaje claro en vez de romper el scan.
+- **Análisis con IA opcional, multi-proveedor** — `--no-ai` lo desactiva por completo; sin ninguna de `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `OPENAI_API_KEY` configurada, el análisis se omite con un mensaje claro en vez de romper el scan.
 - **Tagging MITRE ATT&CK** — cada finding lleva técnicas asociadas (ej. `T1046` para puertos, `T1590.002` para DNS).
 - **Salida enriquecida** — tabla en terminal con Rich (color por severidad), export a JSON, y generación de reporte HTML/PDF (Jinja2 + WeasyPrint) vía `--report`.
 - **Persistencia opcional en Supabase** — si `SUPABASE_URL`/`SUPABASE_ANON_KEY` están seteadas, cada scan se guarda en Supabase (`persist_scan`, best-effort — si falla, no rompe el CLI) para verse en el dashboard de Next.js incluido en `frontend/` (app separada, no hace falta para correr el CLI).
@@ -33,7 +33,7 @@ ReconAI recibe un target (IP, dominio o host de laboratorio) y corre **6 agentes
 
 | Variable | Requerida | Para qué |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Solo si no usás `--no-ai` | Habilita el análisis con Claude al final del scan |
+| `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `OPENAI_API_KEY` | Solo si no usás `--no-ai` — con cualquiera de estas API keys alcanza | Habilita el análisis con IA al final del scan. Si hay más de una seteada, se usa por prioridad: `ANTHROPIC_API_KEY` > `GEMINI_API_KEY` > `OPENAI_API_KEY` |
 | `SHODAN_API_KEY` | No | Habilita `ShodanAgent` (sin ella, el agente se salta con un finding informativo) |
 | `SUPABASE_URL` | No | Persistencia de scans/findings para el dashboard |
 | `SUPABASE_ANON_KEY` | No | Idem — clave anónima del proyecto Supabase |
@@ -61,7 +61,8 @@ pip install -e .
 
 # Configurar variables de entorno
 cp .env.example .env
-# Editar .env y completar ANTHROPIC_API_KEY (y opcionalmente SHODAN_API_KEY / SUPABASE_*)
+# Editar .env y completar UNA de ANTHROPIC_API_KEY / GEMINI_API_KEY / OPENAI_API_KEY
+# (y opcionalmente SHODAN_API_KEY / SUPABASE_*)
 
 # Opcional, solo si vas a usar el agente de screenshots:
 playwright install chromium
@@ -83,7 +84,7 @@ reconai scan <target> [OPTIONS]
 
 Opciones de "scan":
   --force-scope           Fuerza el scan fuera de los rangos autorizados (requiere autorización escrita)
-  --no-ai                 Salta el análisis con Claude
+  --no-ai                 Salta el análisis con IA
   --output, -o <path>     Guarda el reporte en JSON
   --report, -r <path>     Genera reporte PDF (o HTML si el path termina en .html)
   --quiet, -q              Suprime el banner y la barra de progreso
@@ -98,8 +99,8 @@ reconai scan 127.0.0.1 --no-ai --output scan.json
 Otros ejemplos:
 
 ```bash
-reconai scan 10.10.11.21                              # scan completo con análisis de Claude (in-scope por default, HTB)
-reconai scan target.htb --no-ai                       # sin llamar a la API de Claude
+reconai scan 10.10.11.21                              # scan completo con análisis de IA (in-scope por default, HTB)
+reconai scan target.htb --no-ai                       # sin llamar a la API de IA
 reconai scan target.htb --report informe.pdf          # genera reporte PDF
 reconai scan 192.168.1.50 --force-scope --output r.json  # target fuera de scope, con autorización explícita
 ```
@@ -121,7 +122,8 @@ reconai/
 │   ├── core/
 │   │   ├── target.py            # Target.parse() + scope gate (ScopeValidator)
 │   │   ├── orchestrator.py      # dispatch async de los 6 agentes + AGENTS registry
-│   │   └── ai_analyzer.py       # integración con Claude (Anthropic)
+│   │   ├── ai_analyzer.py       # prompt building + parsing de la respuesta de IA
+│   │   └── ai_provider.py       # auto-detección de proveedor (Anthropic/Gemini/OpenAI)
 │   ├── agents/
 │   │   ├── base.py              # BaseAgent ABC — tolerante a fallos
 │   │   ├── dns_recon.py         # DNS, AXFR, subdominios, SPF/DMARC

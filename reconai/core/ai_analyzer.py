@@ -1,34 +1,19 @@
 """
-AI Analyzer — Claude integration.
+AI Analyzer — AI provider integration.
 
 Receives the aggregated ReconResult and generates:
   1. A narrative analysis of the attack surface
   2. Prioritized attack paths for further manual testing
   3. MITRE ATT&CK technique mapping per finding
+
+The actual provider (Anthropic Claude, Google Gemini, or OpenAI) is
+auto-detected from environment variables — see reconai/core/ai_provider.py.
 """
 
 from __future__ import annotations
 
-import json
-import os
-
-import anthropic
-
+from reconai.core.ai_provider import get_ai_completion
 from reconai.types.findings import Finding, FindingType, ReconResult, Severity
-
-_client: anthropic.AsyncAnthropic | None = None
-
-
-def _get_client() -> anthropic.AsyncAnthropic:
-    global _client
-    if _client is None:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            raise RuntimeError(
-                "ANTHROPIC_API_KEY not set. Add it to your .env file."
-            )
-        _client = anthropic.AsyncAnthropic(api_key=api_key)
-    return _client
 
 
 def _build_prompt(result: ReconResult) -> str:
@@ -59,14 +44,7 @@ Format your response as plain text. Be specific — reference actual hostnames, 
 async def analyze_with_ai(result: ReconResult) -> None:
     """Enrich result with AI narrative analysis. Modifies result in place."""
     try:
-        client = _get_client()
-
-        message = await client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1024,
-            messages=[{"role": "user", "content": _build_prompt(result)}],
-        )
-        result.ai_analysis = message.content[0].text
+        result.ai_analysis = await get_ai_completion(_build_prompt(result), max_tokens=1024)
 
         # Extract attack paths (lines starting with numbered list)
         import re
@@ -75,7 +53,5 @@ async def analyze_with_ai(result: ReconResult) -> None:
 
     except RuntimeError as exc:
         result.ai_analysis = f"AI analysis skipped — {exc}"
-    except anthropic.AuthenticationError:
-        result.ai_analysis = "AI analysis skipped — invalid ANTHROPIC_API_KEY."
     except Exception as exc:
         result.ai_analysis = f"AI analysis failed: {exc}"

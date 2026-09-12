@@ -49,7 +49,7 @@ def scan(
         "--force-scope",
         help="Bypass scope check. Only use with WRITTEN AUTHORIZATION.",
     ),
-    no_ai: bool = typer.Option(False, "--no-ai", help="Skip Claude AI analysis."),
+    no_ai: bool = typer.Option(False, "--no-ai", help="Skip AI analysis."),
     output: Path | None = typer.Option(None, "--output", "-o", help="Save JSON report to file."),
     report: Path | None = typer.Option(None, "--report", "-r", help="Generate PDF report (e.g. --report report.pdf). Use .html for HTML only."),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress banner and progress."),
