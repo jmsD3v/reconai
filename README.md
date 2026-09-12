@@ -1,5 +1,7 @@
 # ReconAI
 
+![banner](docs/banner.svg)
+
 Orquestador de reconocimiento ofensivo (P-01 del portfolio de ciberseguridad) que dispara varios agentes de recon en paralelo contra un target y usa IA para resumir la superficie de ataque.
 
 ---
