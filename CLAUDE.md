@@ -243,7 +243,7 @@ Cuando Juanma vuelva a Claude.ai, va a pedir planificar el proyecto siguiente.
 ## Footer obligatorio en todo output del proyecto
 
 ```
-Copyright © 2025 Desarrollado desde Las Breñas con 💜 por @jmsDev All rights reserved
+Copyright © {año actual, calculado dinámicamente — nunca hardcodear} Desarrollado desde Las Breñas con 💜 por @jmsDev All rights reserved
 ```
 
 `@jmsDev` → https://www.linkedin.com/in/jmsilva83
